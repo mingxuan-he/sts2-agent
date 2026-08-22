@@ -48,7 +48,11 @@
                  padding: 4px 12px; cursor: pointer; font: inherit; }
   input[type=range] { width: 100%; accent-color: var(--blue); }
   .act { color: var(--blue); word-break: break-all; white-space: pre-wrap; }
-  #art img { width: 42px; height: 42px; object-fit: contain; margin: 2px; vertical-align: middle; }
+  #art .grp { margin-bottom: 6px; }
+  #art .grp:last-child { margin-bottom: 0; }
+  #art .lbl { color: var(--dim); font-size: 10px; }
+  #art img { width: 40px; height: 40px; object-fit: contain; margin: 2px; vertical-align: middle; }
+  #art .grp.enemies img { width: 84px; height: 84px; }
   .rej { color: var(--red); font-size: 12px; white-space: pre-wrap; }
   #podview details { margin-bottom: 8px; }
   #podview summary { cursor: pointer; color: var(--blue); }
@@ -152,21 +156,21 @@ async function loadRuns() {
 let steps = [], pos = 0, codex = null;
 fetch("/api/codex/images").then(r => r.json()).then(m => { codex = m; if (steps.length) show(); }).catch(() => {});
 function artFor(text) {
-  if (!codex) return [];
-  const imgs = [];
-  const add = (kind, name) => {
+  if (!codex) return {};
+  const groups = { enemies: [], relics: [], potions: [] };
+  const add = (kind, grp, name) => {
     const url = (codex[kind] || {})[name.trim().toLowerCase()];
-    if (url) imgs.push([name, url]);
+    if (url) groups[grp].push([name.trim(), url]);
   };
   for (const line of text.split("\n")) {
     let m;
     if ((m = line.match(/^\[Relics\] (.*?)(  \(descriptions.*)?$/)))
-      m[1].split(", ").forEach(r => add("relics", r.replace(/\(.*$/, "")));
+      m[1].split(", ").forEach(r => add("relics", "relics", r.replace(/\(.*$/, "")));
     if ((m = line.match(/^\[Potions\] (.*?)(  \(descriptions.*)?$/)))
-      m[1].split(" | ").forEach(p => add("potions", p.replace(/^\d+: /, "")));
-    if ((m = line.match(/^\s*\d+: (.+?) HP:/))) add("monsters", m[1]);
+      m[1].split(" | ").forEach(p => add("potions", "potions", p.replace(/^\d+: /, "")));
+    if ((m = line.match(/^\s*\d+: (.+?) HP:/))) add("monsters", "enemies", m[1]);
   }
-  return imgs;
+  return groups;
 }
 async function openReplay(runId) {
   steps = await j(`/api/runs/${runId}/decisions`);
@@ -185,8 +189,14 @@ function show() {
   el.textContent = tooltipify(d.serialized);
   if (window.SpireCodex) try { SpireCodex.scan(el); } catch {}
   const art = artFor(d.serialized);
-  $("artbox").style.display = art.length ? "" : "none";
-  $("art").innerHTML = art.map(([n, u]) => `<img src="${u}" title="${esc(n)}" loading="lazy">`).join("");
+  const any = Object.values(art).some(g => g.length);
+  $("artbox").style.display = any ? "" : "none";
+  $("art").innerHTML = Object.entries(art)
+    .filter(([, g]) => g.length)
+    .map(([grp, g]) =>
+      `<div class="grp ${grp}"><div class="lbl">${grp}</div>` +
+      g.map(([n, u]) => `<img src="${u}" title="${esc(n)}" loading="lazy">`).join("") + "</div>")
+    .join("");
   let act = "—";
   if (d.action) { const a = JSON.parse(d.action); act = a.action + " " + JSON.stringify(a.args ?? {}); }
   $("action").textContent = act;
