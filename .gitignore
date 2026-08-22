@@ -1,0 +1,12 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+runs/
+*.egg-info/
+
+# sts2-cli: game DLLs are copyrighted, don't commit
+sts2-cli/lib/
+sts2-cli/.git/
+# headless DLL staging area
+headless/*.dll
