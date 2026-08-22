@@ -25,6 +25,7 @@ Env:  STS2_DB (default data/sts2.sqlite3), STS2_ALLOW_EVAL=1 to permit pool=eval
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import sys
 import uuid
@@ -176,7 +177,12 @@ async def post_action(run_uuid: str, req: ActionRequest) -> dict[str, Any]:
             db.record_action(session.db_id, session.decision_id, req.model_dump(), ok=False,
                              error=result.get("message"))
             payload = _state_payload(session, "text")
-            payload["error"] = result.get("message", "invalid action")
+            # Echo back exactly what was received so key/type mismatches are
+            # unmissable (e.g. sending args={"option": "1"} to choose_option).
+            payload["error"] = (
+                f"{result.get('message', 'invalid action')} "
+                f"(received: action={req.action!r}, args={json.dumps(req.args)})"
+            )
             return payload
 
         db.record_action(session.db_id, session.decision_id, req.model_dump(), ok=True)

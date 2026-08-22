@@ -138,9 +138,7 @@ const agent = new Agent({
         session.capWarned = true;
         agent.steer({
           role: "user",
-          content:
-            "Your token budget is exhausted. This is your final turn: call finish_session " +
-            "with a handoff for the next session NOW.",
+          content: "Your token budget is exhausted. The session ends after your next turn.",
           timestamp: Date.now(),
         });
         return false;
@@ -151,7 +149,7 @@ const agent = new Agent({
     if (!session.capWarned && spent >= TOKEN_CAP * 0.85) {
       agent.steer({
         role: "user",
-        content: `Budget warning: ~${spent} of ${TOKEN_CAP} tokens spent. Wrap up and write your handoff soon.`,
+        content: `Budget note: ~${spent} of ${TOKEN_CAP} tokens spent.`,
         timestamp: Date.now(),
       });
       return false;
