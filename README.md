@@ -44,6 +44,9 @@ Pure inference — no gradients. A persistent agent lives in a pod with the game
 
 Why the same repo: both tracks share the engine wrapper, state serializer, seed batteries, and eval harness; and the agent track's winning trajectories become SFT cold-start data for the weights track.
 
+Full architecture and API design: [docs/track2-pod-design.md](docs/track2-pod-design.md).
+Model choice + cost analysis: [docs/model-selection-2026-08.md](docs/model-selection-2026-08.md).
+
 ## Repo layout
 
 ```
