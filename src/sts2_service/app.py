@@ -49,6 +49,9 @@ TERMINAL = {"game_over"}
 db = Database(os.environ.get("STS2_DB", REPO_ROOT / "data" / "sts2.sqlite3"))
 if db.seed_pools_empty():
     db.insert_seeds(generate_pools())
+_swept = db.sweep_orphaned_runs()
+if _swept:
+    print(f"[startup] swept {_swept} orphaned active run(s) -> abandoned")
 
 app = FastAPI(title="sts2 game service")
 

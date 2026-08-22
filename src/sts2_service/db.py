@@ -99,6 +99,16 @@ class Database:
         ).fetchone()
         return row[0] if row else None
 
+    def sweep_orphaned_runs(self) -> int:
+        """Mark 'active' runs as abandoned. Call at service startup: engine
+        subprocesses die with the service, so any active row is stale."""
+        cur = self._conn.execute(
+            "UPDATE runs SET status = 'abandoned', ended_at = ? WHERE status = 'active'",
+            (time.time(),),
+        )
+        self._conn.commit()
+        return cur.rowcount
+
     # ── runs ──
     def create_run(self, run_uuid: str, seed: str, character: str,
                    ascension: int, pool: str, snapshot_id: str | None = None) -> int:
