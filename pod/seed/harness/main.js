@@ -34,6 +34,29 @@ const modelDef = {
   maxTokens: parseInt(process.env.MODEL_MAX_TOKENS ?? "16384", 10),
 };
 
+// OpenRouter routing prefs. pi-ai has no extra-body passthrough, so inject
+// them at the fetch layer. Defaults: fp8 only (one provider serves fp4), and
+// skip providers whose Qwen tool-call parsing is broken (verified 2026-08-22:
+// venice and deepinfra return the tool call inside `reasoning` with
+// tool_calls=null). Override with OPENROUTER_PROVIDER_JSON.
+if (modelDef.baseUrl.includes("openrouter.ai")) {
+  const prefs = JSON.parse(
+    process.env.OPENROUTER_PROVIDER_JSON ??
+      '{"quantizations":["fp8"],"ignore":["venice","deepinfra"]}',
+  );
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    if (init?.body && String(url).includes("/chat/completions")) {
+      try {
+        const body = JSON.parse(init.body);
+        body.provider = { ...prefs, ...body.provider };
+        init = { ...init, body: JSON.stringify(body) };
+      } catch {}
+    }
+    return origFetch(url, init);
+  };
+}
+
 const models = createModels();
 models.setProvider(
   createProvider({
