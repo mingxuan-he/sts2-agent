@@ -229,7 +229,7 @@ public class RunSimulator
     private IReadOnlyList<IReadOnlyList<CardModel>>? _pendingBundles;
     private TaskCompletionSource<IEnumerable<CardModel>>? _pendingBundleTcs;
 
-    public Dictionary<string, object?> StartRun(string character, int ascension = 0, string? seed = null, string lang = "en")
+    public Dictionary<string, object?> StartRun(string character, int ascension = 0, string? seed = null, string lang = "en", string? act1 = null)
     {
         try
         {
@@ -243,9 +243,41 @@ public class RunSimulator
             var seedStr = seed ?? "headless_" + DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             Log($"Creating RunState with seed={seedStr}");
 
-            // Use CreateForTest which properly handles mutable copies internally
+            // Act selection, replicating StartRunLobby.BeginRunLocally: the game
+            // rolls each act variant from a seed-derived "act_selection" rng
+            // (Overgrowth vs Underdocks for act 1 is random per seed, NOT a
+            // player choice). CreateForTest's default (GetDefaultList) would
+            // always pick the IsDefault act — that diverges from the real game.
+            // With TestMode on, the "force undiscovered act" branch of
+            // GetRandomList is skipped, i.e. behaves like a completed profile.
+            List<ActModel> acts;
+            try
+            {
+                var actRng = new MegaCrit.Sts2.Core.Random.Rng(
+                    (uint)StringHelper.GetDeterministicHashCode(seedStr), "act_selection");
+                acts = ActModel.GetRandomList(actRng, UnlockState.all, isMultiplayer: false).ToList();
+            }
+            catch (Exception ex)
+            {
+                return Error($"Act selection failed: {ex.Message}");
+            }
+
+            // Optional explicit act-1 override (testing/scenarios), mirroring the
+            // lobby's `val[0] = GetAct(Act1) ?? val[0]`.
+            if (!string.IsNullOrEmpty(act1))
+            {
+                var act1Id = act1.Trim().ToUpperInvariant();
+                var model = ModelDb.GetById<ActModel>(new ModelId("ACT", act1Id));
+                if (model == null)
+                    return Error($"Unknown act1: {act1} (Overgrowth | Underdocks)");
+                acts[0] = model;
+            }
+            Log($"Acts: {string.Join(" -> ", acts.Select(a => a.Id.Entry))}");
+
+            // CreateForTest maps ToMutable over the act list itself
             _runState = RunState.CreateForTest(
                 players: new[] { player },
+                acts: acts,
                 ascensionLevel: ascension,
                 seed: seedStr
             );

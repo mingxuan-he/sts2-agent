@@ -118,7 +118,8 @@ class Program
                     cmd.TryGetProperty("character", out var ch) ? ch.GetString() ?? "Ironclad" : "Ironclad",
                     cmd.TryGetProperty("ascension", out var asc) ? asc.GetInt32() : 0,
                     cmd.TryGetProperty("seed", out var s) ? s.GetString() : null,
-                    cmd.TryGetProperty("lang", out var lang) ? lang.GetString() ?? "en" : "en"
+                    cmd.TryGetProperty("lang", out var lang) ? lang.GetString() ?? "en" : "en",
+                    cmd.TryGetProperty("act1", out var a1) ? a1.GetString() : null
                 );
 
             case "action":
