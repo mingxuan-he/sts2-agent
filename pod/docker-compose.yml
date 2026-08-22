@@ -81,6 +81,7 @@ services:
       - pod_home:/podhome:ro
     ports:
       - "127.0.0.1:8310:8310"
+      - "${TAILNET_IP:-100.89.191.38}:8310:8310"   # tailnet only, not the public IP
     networks: [default]              # host side only — NEVER on game_net/egress_net
     restart: unless-stopped
     mem_limit: 256m

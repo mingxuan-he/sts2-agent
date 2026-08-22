@@ -134,7 +134,7 @@ async function loadRuns() {
   const rows = await j("/api/runs");
   $("runs").innerHTML =
     "<tr><th>id</th><th>char</th><th>seed</th><th>pool</th><th>status</th><th>act/floor</th>"
-    + "<th>decisions</th><th>rejected</th><th>lookups</th><th>start</th><th>dur</th></tr>"
+    + "<th>decisions</th><th>rejected</th><th title="detail-endpoint calls: deck / piles / relics / potions / map">detail&nbsp;q</th><th>start</th><th>dur</th></tr>"
     + rows.map(r => `<tr class="row" data-id="${r.id}">
         <td class="dim">${r.id}</td><td>${esc(r.character)}</td><td class="dim">${esc(r.seed)}</td>
         <td class="dim">${r.pool}</td><td><span class="b ${r.status}">${r.status}</span></td>
