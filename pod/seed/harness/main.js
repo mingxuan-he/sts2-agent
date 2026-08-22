@@ -222,6 +222,20 @@ if (!session.finished && session.lastError) {
 }
 
 session.reason ??= session.finished ? "finished" : "stalled";
+
+// Abrupt end (cap/stall) without finish_session: stamp HANDOFF.md so the next
+// session knows the content above is from an OLDER session and must re-verify
+// game state instead of trusting it.
+if (!session.finished) {
+  try {
+    fs.appendFileSync(
+      path.join(POD, "HANDOFF.md"),
+      `\n\n---\n[harness] Session ${sessionId} ended abruptly (${session.reason}) WITHOUT updating this handoff. ` +
+        "Everything above is from an earlier session and may be stale — use game_list_runs and game_state to re-verify before acting.\n",
+    );
+  } catch {}
+}
+
 log({ type: "session_end", reason: session.reason, tokens: session.tokens });
 console.log(`[harness] session ${sessionId} ended: ${session.reason} (${session.tokens.input} in / ${session.tokens.output} out)`);
 await closeLog();
