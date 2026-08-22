@@ -10,3 +10,9 @@ sts2-cli/lib/
 sts2-cli/.git/
 # headless DLL staging area
 headless/*.dll
+
+# game service data (SQLite logs)
+data/
+# dotnet build outputs
+sts2-cli/src/*/bin/
+sts2-cli/src/*/obj/

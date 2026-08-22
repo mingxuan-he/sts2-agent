@@ -52,10 +52,17 @@ Model choice + cost analysis: [docs/model-selection-2026-08.md](docs/model-selec
 ```
 headless_env.py         — async subprocess wrapper around sts2-cli (+ HeadlessEnvPool)
 sts2-cli/               — headless game engine (vendored build; lib/ DLLs not committed)
+src/sts2_service/       — Track 2 game service: FastAPI + serializer + SQLite logging
 src/sts2_rl/            — Track 1: envs, rewards, scenarios, GRPO dataset
-tests/                  — sim + dataset tests
+tests/                  — serializer + sim + dataset tests
 scripts/                — gameplay recording utilities
 benchmarks/             — model latency notes
+```
+
+Run the game service (venv: `uv venv && uv pip install -e ".[service,dev]"`):
+
+```
+uvicorn sts2_service.app:app --app-dir src --host 127.0.0.1 --port 8300
 ```
 
 ## References

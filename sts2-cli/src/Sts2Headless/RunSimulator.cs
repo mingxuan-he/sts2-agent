@@ -450,6 +450,39 @@ public class RunSimulator
         catch (Exception ex) { return ErrorWithTrace("EnterRoom failed", ex); }
     }
 
+    /// <summary>Read-only dump of combat pile contents (draw/discard/exhaust). The draw
+    /// pile is exported in true order — clients that must hide draw order (RL observation
+    /// contracts) are responsible for sorting before display.</summary>
+    public Dictionary<string, object?> GetPiles()
+    {
+        try
+        {
+            if (_runState == null) return Error("No run in progress");
+            var pcs = _runState.Players[0].PlayerCombatState;
+            if (pcs == null) return Error("Not in combat");
+
+            List<Dictionary<string, object?>> Dump(IEnumerable<CardModel>? cards) =>
+                cards?.Where(c => c != null).Select(c => new Dictionary<string, object?>
+                {
+                    ["id"] = c.Id.ToString(),
+                    ["name"] = _loc.Card(c.Id.Entry),
+                    ["cost"] = c.EnergyCost?.GetResolved() ?? 0,
+                    ["type"] = c.Type.ToString(),
+                    ["upgraded"] = c.IsUpgraded,
+                    ["description"] = _loc.Bilingual("cards", c.Id.Entry + ".description"),
+                }).ToList() ?? new();
+
+            return new Dictionary<string, object?>
+            {
+                ["type"] = "piles",
+                ["draw"] = Dump(pcs.DrawPile?.Cards),
+                ["discard"] = Dump(pcs.DiscardPile?.Cards),
+                ["exhaust"] = Dump(pcs.ExhaustPile?.Cards),
+            };
+        }
+        catch (Exception ex) { return ErrorWithTrace("GetPiles failed", ex); }
+    }
+
     public Dictionary<string, object?> SetDrawOrder(List<string> cardIds)
     {
         try

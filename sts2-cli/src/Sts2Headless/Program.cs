@@ -161,6 +161,9 @@ class Program
             case "get_map":
                 return sim.GetFullMap();
 
+            case "get_piles":
+                return sim.GetPiles();
+
             case "set_player":
             {
                 var args = new Dictionary<string, JsonElement>();

@@ -151,9 +151,22 @@ info → plan around perfect information.
 ## Build order & open verifications
 
 1. Game service: FastAPI over `headless_env.py` + serializer port + SQLite.
+   **✅ Built 2026-08-22** — `src/sts2_service/` (app, serializer, db, seeds).
+   Deltas from the sketch above: routes are `/runs/{run_id}/...` (multiple
+   concurrent runs); a `get_piles` command was added to the vendored sts2-cli
+   (pile contents weren't exported; draw order still hidden — service sorts);
+   card/relic/potion description templates are resolved server-side from
+   exported stats (`Deal {Damage:diff()} damage.` → `Deal 6 damage.`);
+   every action attempt is logged (`action_attempts`), so illegal-action rate
+   is measurable; eval pool requests are 403 unless `STS2_ALLOW_EVAL=1`.
+   Seed pools (200 train / 40 eval) are generated once and persisted in the DB.
+   Start: `uvicorn sts2_service.app:app --app-dir src --port 8300`.
 2. Pod image: node + vendored pi harness + compose (game, pod, proxy) + volume.
 3. Ralph entrypoint + snapshot/eval scripts.
 
-Verify early: sts2-cli runs with no Steam/network dependency at runtime; same
-seed → identical run across container restarts (determinism underpins the eval
-battery AND the seed flag); `headless_env.py` works from the new repo path.
+Early verifications — **all passed 2026-08-22**: sts2-cli runs Steam-free on
+the VPS (no Steam client installed); same seed → byte-identical states 31
+decisions deep across separate engine processes; `headless_env.py` smoke test
+passes from the repo path; game DLL is current (installed Steam buildid
+23811903 == latest public build, 2026-06-19; upstream sts2-cli last commit
+2026-05-30 predates our copy).
