@@ -16,3 +16,6 @@ data/
 # dotnet build outputs
 sts2-cli/src/*/bin/
 sts2-cli/src/*/obj/
+# harness deps resolved at image build; only the lockfile is committed
+pod/seed/harness/node_modules/
+snapshots/

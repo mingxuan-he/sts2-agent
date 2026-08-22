@@ -86,11 +86,18 @@ class HeadlessEnv:
             return await self._read()
 
     async def _read(self) -> dict[str, Any]:
-        line = await self._proc.stdout.readline()
-        if not line:
-            stderr = await self._proc.stderr.read()
-            raise RuntimeError(f"sts2-cli process died: {stderr.decode()[-500:]}")
-        return json.loads(line)
+        # `dotnet run` can emit MSBuild/restore chatter on stdout before the
+        # protocol starts; every real protocol line is a JSON object, so skip
+        # anything that isn't one.
+        for _ in range(200):
+            line = await self._proc.stdout.readline()
+            if not line:
+                stderr = await self._proc.stderr.read()
+                raise RuntimeError(f"sts2-cli process died: {stderr.decode()[-500:]}")
+            stripped = line.strip()
+            if stripped.startswith(b"{"):
+                return json.loads(stripped)
+        raise RuntimeError("sts2-cli produced no JSON output in 200 lines")
 
     @property
     def is_alive(self) -> bool:

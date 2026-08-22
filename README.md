@@ -53,10 +53,17 @@ Model choice + cost analysis: [docs/model-selection-2026-08.md](docs/model-selec
 headless_env.py         — async subprocess wrapper around sts2-cli (+ HeadlessEnvPool)
 sts2-cli/               — headless game engine (vendored build; lib/ DLLs not committed)
 src/sts2_service/       — Track 2 game service: FastAPI + serializer + SQLite logging
+pod/                    — Track 2 pod: compose stack, supervisor, bootstrap, seed harness
 src/sts2_rl/            — Track 1: envs, rewards, scenarios, GRPO dataset
 tests/                  — serializer + sim + dataset tests
-scripts/                — gameplay recording utilities
+scripts/                — gameplay recording + pod snapshot
 benchmarks/             — model latency notes
+```
+
+Run the pod (set `MODEL_API_KEY` in `.env` first):
+
+```
+cd pod && docker compose --env-file ../.env up -d --build
 ```
 
 Run the game service (venv: `uv venv && uv pip install -e ".[service,dev]"`):

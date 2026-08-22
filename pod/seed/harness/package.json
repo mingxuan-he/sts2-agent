@@ -1,0 +1,10 @@
+{
+  "name": "pod-harness",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "^0.84",
+    "@earendil-works/pi-ai": "^0.84",
+    "typebox": "^1"
+  }
+}

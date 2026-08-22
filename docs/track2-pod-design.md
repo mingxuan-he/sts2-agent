@@ -162,7 +162,33 @@ info → plan around perfect information.
    Seed pools (200 train / 40 eval) are generated once and persisted in the DB.
    Start: `uvicorn sts2_service.app:app --app-dir src --port 8300`.
 2. Pod image: node + vendored pi harness + compose (game, pod, proxy) + volume.
-3. Ralph entrypoint + snapshot/eval scripts.
+   **✅ Built 2026-08-22** — `pod/` (compose, three images, supervisor, bootstrap,
+   seeded /pod skeleton incl. the harness). Design notes settled during build:
+   - Two-layer Ralph loop: immutable `/opt/supervisor.sh` (seed /pod, run
+     `/pod/loop.sh`, crash backoff, daily session cap counted in
+     `/pod/.supervisor/` where the agent can see it) + agent-editable
+     `loop.sh`/`harness/` (pi-agent-core, JS). One process = one session =
+     one context; `/pod` files are the only memory.
+   - Session ends: `finish_session` tool (writes `/pod/HANDOFF.md`) → exit 0;
+     3 consecutive no-tool turns → exit 2; token cap (`SESSION_TOKEN_CAP`,
+     one warned grace turn via `agent.steer` — steering is polled every turn,
+     followUp only when the agent would stop) → exit 3; provider/stream error
+     → exit 1 so the supervisor backs off instead of burning the session cap.
+   - Harness logs everything (tools, messages, usage) to
+     `/pod/sessions/*.jsonl` — the agent's own run-review substrate.
+   - Model fully env-configured (`MODEL_ID`/`MODEL_BASE_URL`/`MODEL_API_KEY`,
+     default qwen/qwen3.6-35b-a3b via OpenRouter, $0.14/$1.00 per M).
+   - Isolation verified in-container: game API reachable; openrouter.ai 200
+     via proxy; other domains blocked by tinyproxy allowlist; direct internet
+     unroutable (DNS EAI_AGAIN). NODE_USE_ENV_PROXY makes fetch honor the
+     proxy; auth headers verified to pass through the CONNECT tunnel.
+   - Gotcha: containers on only-internal networks can't publish ports — the
+     game service also joins the default bridge for its 127.0.0.1:8300 publish.
+   - Start: `cd pod && docker compose --env-file ../.env up -d --build`
+     (set MODEL_API_KEY in the repo-root .env first).
+3. Snapshot: `scripts/pod-snapshot.sh` (pod volume tar + consistent DB backup).
+   Remaining: restore + eval-battery scripts (fresh container from snapshot,
+   eval seed pool, fixed battery).
 
 Early verifications — **all passed 2026-08-22**: sts2-cli runs Steam-free on
 the VPS (no Steam client installed); same seed → byte-identical states 31

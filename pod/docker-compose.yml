@@ -1,0 +1,81 @@
+# Track 2 pod stack: game service + agent pod + egress proxy.
+#
+# Networks (both internal — no direct internet):
+#   game_net   pod <-> game service        (the agent's ONLY game interface)
+#   egress_net pod <-> proxy               (the agent's ONLY internet path)
+# The proxy alone also sits on the default bridge and enforces the domain
+# allowlist (LLM API only). The game service publishes its port to
+# 127.0.0.1 for host-side tooling/webapp; the pod reaches it via game_net.
+#
+# Usage (run from this directory; config lives in the repo-root .env):
+#   docker compose --env-file ../.env up -d --build
+#   docker compose logs -f agent
+# Knobs: MODEL_ID, MODEL_BASE_URL, MODEL_API_KEY, SESSION_TOKEN_CAP,
+#        MAX_SESSIONS_PER_DAY, STS2_ALLOW_EVAL, STS2_SNAPSHOT_ID.
+
+services:
+  game:
+    build:
+      context: ..
+      dockerfile: pod/game.Dockerfile
+    environment:
+      STS2_DB: /data/sts2.sqlite3
+      STS2_ALLOW_EVAL: ${STS2_ALLOW_EVAL:-0}
+      STS2_SNAPSHOT_ID: ${STS2_SNAPSHOT_ID:-}
+    volumes:
+      - game_data:/data
+    ports:
+      - "127.0.0.1:8300:8300"   # host-side observability only
+    networks:
+      game_net:
+      default:                   # needed for the port publish (internal nets can't)
+    restart: unless-stopped
+    mem_limit: 4g
+    cpus: 3
+
+  proxy:
+    build:
+      context: proxy
+    networks:
+      egress_net:
+      default:                   # internet-facing side
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.5
+
+  agent:
+    build:
+      context: ..
+      dockerfile: pod/agent.Dockerfile
+    environment:
+      GAME_URL: http://game:8300
+      HTTP_PROXY: http://proxy:8888
+      HTTPS_PROXY: http://proxy:8888
+      NO_PROXY: game
+      NODE_USE_ENV_PROXY: "1"    # make Node's global fetch honor the proxy vars
+      MODEL_ID: ${MODEL_ID:-qwen/qwen3.6-35b-a3b}
+      MODEL_BASE_URL: ${MODEL_BASE_URL:-https://openrouter.ai/api/v1}
+      MODEL_API_KEY: ${MODEL_API_KEY:?set MODEL_API_KEY in ../.env}
+      MODEL_CONTEXT_WINDOW: ${MODEL_CONTEXT_WINDOW:-262144}
+      MODEL_MAX_TOKENS: ${MODEL_MAX_TOKENS:-16384}
+      SESSION_TOKEN_CAP: ${SESSION_TOKEN_CAP:-200000}
+      MAX_SESSIONS_PER_DAY: ${MAX_SESSIONS_PER_DAY:-50}
+    volumes:
+      - pod_home:/pod
+    networks: [game_net, egress_net]
+    restart: unless-stopped
+    user: "1000:1000"
+    mem_limit: 2g
+    cpus: 2
+    pids_limit: 256
+
+networks:
+  game_net:
+    internal: true
+  egress_net:
+    internal: true
+  default: {}
+
+volumes:
+  game_data:
+  pod_home:

@@ -1,0 +1,8 @@
+.git
+.venv
+.env
+data/
+pod/seed/harness/node_modules/
+sts2-cli/src/*/bin/
+sts2-cli/src/*/obj/
+**/__pycache__/
