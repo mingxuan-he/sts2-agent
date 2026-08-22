@@ -69,6 +69,23 @@ services:
     cpus: 2
     pids_limit: 256
 
+  webui:
+    build:
+      context: ..
+      dockerfile: pod/webui.Dockerfile
+    environment:
+      PRICE_IN: ${PRICE_IN:-0.14}    # $/M tokens, for cost estimates
+      PRICE_OUT: ${PRICE_OUT:-1.00}
+    volumes:
+      - game_data:/data              # rw mount (sqlite WAL needs -shm), opened read-only in code
+      - pod_home:/podhome:ro
+    ports:
+      - "127.0.0.1:8310:8310"
+    networks: [default]              # host side only — NEVER on game_net/egress_net
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.5
+
 networks:
   game_net:
     internal: true
