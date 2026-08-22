@@ -83,6 +83,60 @@ sample per rollout. Group size 8, ~2,000 steps → 16K rollouts:
 Full-run GRPO (800-decision episodes) is ~40× that — stays off the table; combat-only
 plus SFT-from-pod-trajectories remains the plan.
 
+## Addendum (2026-08-22, later): Tinker inference verified + Prime Intellect
+
+**Tinker inference: real, but overpriced for stock checkpoints.** Tinker has a
+dedicated `SamplingClient`, supports sampling-only usage, exposes an OpenAI-compatible
+endpoint, and can export checkpoints to HuggingFace (no lock-in). But its sampling
+prices are frontier-adjacent for what are commodity open models:
+
+| Serving Qwen3.6-35B-A3B / similar | Input $/M | Output $/M |
+|---|---|---|
+| Tinker sampling | 0.54 | 1.335 |
+| Prime Intellect hosted-training rollout rates (same model) | 0.25 | 0.75 |
+| Open market, gpt-oss-120b (OpenRouter, typical) | ~0.15 | ~0.60 |
+| Open market, gpt-oss-120b (cheapest, CoreWeave) | 0.03 | 0.17 |
+
+Conclusion: **Tinker's sampling premium is only worth paying when it's serving OUR
+LoRA.** For the stock-checkpoint phase of the Idea 2 pod, use commodity inference
+(OpenRouter or a direct provider) — pod cost drops to roughly **$0.30–0.80/run**.
+
+**Prime Intellect (docs.primeintellect.ai):** GPU marketplace + sandboxes + an
+OpenAI-compatible inference router (per-token pricing "coming soon"; catalog includes
+third-party models) + **hosted RL training** built on their open-source `verifiers`
+(environment/eval library) and `prime-rl` stack, with a community Environments Hub.
+Hosted training prices (verify live via `prime train models --output json`):
+
+| Model | Input | Output | Train |
+|---|---|---|---|
+| Qwen3.6-35B-A3B | 0.25 | 0.75 | 1.00 |
+| Qwen3.5-35B-A3B | 0.25 | 0.75 | 1.00 |
+| Nemotron-3.5-Lightning-30B-A3B | 0.15 | 0.45 | 0.60 |
+| gpt-oss-20b | 0.10 | 0.30 | 0.40 |
+| Qwen3.5-9B | 0.20 | 0.60 | 0.60 |
+
+Same target model as Tinker at roughly half the token rates; GRPO campaign estimate
+re-done at PI prices ≈ **$950–1,000** (train tokens dominate, so the end-to-end saving
+vs Tinker is ~25–30%, not half). gpt-oss-120b is NOT in PI's hosted-training list
+(Tinker has it). Open due diligence on PI: LoRA vs full FT, checkpoint
+download/serving story, hosted-RL maturity (Tinker's API + cookbook are more proven,
+and our existing Track-1 code targets Tinker's MessageEnv).
+
+**Hedge that costs almost nothing:** write the STS2 combat environment as a
+`verifiers` environment. verifiers is platform-agnostic (evals run against any
+OpenAI-compatible endpoint), PI hosted training consumes it natively, porting to it
+from our MessageEnv is mostly moving the serializer/reward calls, and the
+Environments Hub is a natural place to later publish the STS2 env + seed benchmark.
+
+**Revised runtime decision for Idea 2:**
+- Stock phase: **gpt-oss-120b via commodity inference** (~$0.15/$0.60 typical) as the
+  default player, with Qwen3.6-35B-A3B benchmarked alongside wherever it's served
+  cheaply. Same 20-seed battery decides.
+- LoRA phase (weights trained): serve via Tinker sampling or PI depending on which
+  platform trained it; HF export keeps self-hosting open.
+- Training platform: decide after a ~$100 pilot on each — PI wins on price +
+  ecosystem, Tinker on maturity + gpt-oss-120b availability + existing code.
+
 ## Immediate implications
 
 - Update Track-1 code/docs: Qwen3-30B-A3B → Qwen3.6-35B-A3B (check `check_models.py`
