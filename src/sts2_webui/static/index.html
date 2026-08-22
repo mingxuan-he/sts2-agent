@@ -48,6 +48,7 @@
                  padding: 4px 12px; cursor: pointer; font: inherit; }
   input[type=range] { width: 100%; accent-color: var(--blue); }
   .act { color: var(--blue); word-break: break-all; white-space: pre-wrap; }
+  #art img { width: 42px; height: 42px; object-fit: contain; margin: 2px; vertical-align: middle; }
   .rej { color: var(--red); font-size: 12px; white-space: pre-wrap; }
   #podview details { margin-bottom: 8px; }
   #podview summary { cursor: pointer; color: var(--blue); }
@@ -75,6 +76,7 @@
           <button id="next">▶</button>
         </div>
         <div class="card"><input type="range" id="slider" min="0" max="0" value="0"></div>
+        <div class="card" id="artbox" style="display:none"><div id="art"></div></div>
         <div class="card"><div class="dim" style="font-size:11px">action</div><div class="act" id="action"></div></div>
         <div class="card" id="rejbox" style="display:none"><div class="dim" style="font-size:11px">rejected</div><div class="rej" id="rej"></div></div>
       </aside>
@@ -134,7 +136,7 @@ async function loadRuns() {
   const rows = await j("/api/runs");
   $("runs").innerHTML =
     "<tr><th>id</th><th>char</th><th>seed</th><th>pool</th><th>status</th><th>act/floor</th>"
-    + "<th>decisions</th><th>rejected</th><th title="detail-endpoint calls: deck / piles / relics / potions / map">detail&nbsp;q</th><th>start</th><th>dur</th></tr>"
+    + "<th>decisions</th><th>rejected</th><th title='detail-endpoint calls: deck / piles / relics / potions / map'>detail&nbsp;q</th><th>start</th><th>dur</th></tr>"
     + rows.map(r => `<tr class="row" data-id="${r.id}">
         <td class="dim">${r.id}</td><td>${esc(r.character)}</td><td class="dim">${esc(r.seed)}</td>
         <td class="dim">${r.pool}</td><td><span class="b ${r.status}">${r.status}</span></td>
@@ -147,7 +149,25 @@ async function loadRuns() {
 }
 
 // ── replay ──
-let steps = [], pos = 0;
+let steps = [], pos = 0, codex = null;
+fetch("/api/codex/images").then(r => r.json()).then(m => { codex = m; if (steps.length) show(); }).catch(() => {});
+function artFor(text) {
+  if (!codex) return [];
+  const imgs = [];
+  const add = (kind, name) => {
+    const url = (codex[kind] || {})[name.trim().toLowerCase()];
+    if (url) imgs.push([name, url]);
+  };
+  for (const line of text.split("\n")) {
+    let m;
+    if ((m = line.match(/^\[Relics\] (.*?)(  \(descriptions.*)?$/)))
+      m[1].split(", ").forEach(r => add("relics", r.replace(/\(.*$/, "")));
+    if ((m = line.match(/^\[Potions\] (.*?)(  \(descriptions.*)?$/)))
+      m[1].split(" | ").forEach(p => add("potions", p.replace(/^\d+: /, "")));
+    if ((m = line.match(/^\s*\d+: (.+?) HP:/))) add("monsters", m[1]);
+  }
+  return imgs;
+}
 async function openReplay(runId) {
   steps = await j(`/api/runs/${runId}/decisions`);
   pos = 0;
@@ -164,6 +184,9 @@ function show() {
   const el = $("obs");
   el.textContent = tooltipify(d.serialized);
   if (window.SpireCodex) try { SpireCodex.scan(el); } catch {}
+  const art = artFor(d.serialized);
+  $("artbox").style.display = art.length ? "" : "none";
+  $("art").innerHTML = art.map(([n, u]) => `<img src="${u}" title="${esc(n)}" loading="lazy">`).join("");
   let act = "—";
   if (d.action) { const a = JSON.parse(d.action); act = a.action + " " + JSON.stringify(a.args ?? {}); }
   $("action").textContent = act;

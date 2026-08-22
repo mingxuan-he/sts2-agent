@@ -160,6 +160,44 @@ async def sessions() -> list[dict[str, Any]]:
     return _sessions()
 
 
+# ── spire-codex art map (name -> image url), cached server-side ───────────
+
+_codex_cache: tuple[float, dict[str, Any]] | None = None
+
+
+def _fetch_codex() -> dict[str, Any]:
+    import urllib.request
+
+    out: dict[str, dict[str, str]] = {}
+    for kind in ("relics", "monsters", "potions"):
+        try:
+            req = urllib.request.Request(
+                f"https://spire-codex.com/api/{kind}?limit=1000",
+                headers={"User-Agent": "sts2-agent-webui/0.1 (personal project)"},
+            )
+            with urllib.request.urlopen(req, timeout=20) as r:
+                data = json.loads(r.read())
+            items = data if isinstance(data, list) else data.get("items", [])
+            out[kind] = {
+                e["name"].lower(): "https://spire-codex.com" + e["image_url"]
+                for e in items
+                if e.get("name") and e.get("image_url")
+            }
+        except Exception:
+            out[kind] = {}
+    return out
+
+
+@app.get("/api/codex/images")
+async def codex_images() -> dict[str, Any]:
+    global _codex_cache
+    import asyncio
+
+    if _codex_cache is None or time.time() - _codex_cache[0] > 86400:
+        _codex_cache = (time.time(), await asyncio.to_thread(_fetch_codex))
+    return _codex_cache[1]
+
+
 @app.get("/api/pod/files")
 async def pod_files() -> dict[str, Any]:
     """The agent's notes/skills/prompt — read-only window into its memory."""
