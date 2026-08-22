@@ -104,10 +104,33 @@ async def run_decisions(run_id: int, start: int = 0, limit: int = 2000) -> list[
 _session_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
 
+def _classify_tool(e: dict[str, Any]) -> str:
+    """Bucket a tool call for the self-learning metrics."""
+    n = e.get("name", "")
+    args = str(e.get("args", {}))
+    if n.startswith("game_"):
+        return "game"
+    if n == "bash":
+        cmd = str((e.get("args") or {}).get("command", ""))
+        if "8300" in cmd or ("fetch" in cmd and "game" in cmd.lower()):
+            return "game_fetch"      # plays via raw fetch (the calcified workaround)
+        if any(w in cmd for w in ("sessions", "notes", "skills")):
+            return "self_read"       # inspects its own memory/logs
+        return "misc"
+    if n == "write_file" and any(w in args for w in ("notes", "PROMPT", "HANDOFF", "skills", "bin")):
+        return "doc"
+    if n == "finish_session":
+        return "doc"
+    if n == "read_file" and any(w in args for w in ("notes", "sessions", "skills")):
+        return "self_read"
+    return "misc"
+
+
 def _parse_session(path: Path) -> dict[str, Any]:
     info: dict[str, Any] = {
         "id": path.stem, "reason": None, "tokens_in": 0, "tokens_out": 0,
         "n_tools": 0, "n_turns": 0, "start": None, "end": None, "model": None,
+        "game": 0, "game_fetch": 0, "doc": 0, "self_read": 0, "misc": 0, "doc_chars": 0,
     }
     with path.open() as f:
         for line in f:
@@ -124,6 +147,11 @@ def _parse_session(path: Path) -> dict[str, Any]:
                 info["n_turns"] += 1
             elif t == "tool":
                 info["n_tools"] += 1
+                bucket = _classify_tool(e)
+                info[bucket] += 1
+                if bucket == "doc":
+                    a = e.get("args") or {}
+                    info["doc_chars"] += len(str(a.get("content", a.get("handoff", ""))))
             elif t == "session_end":
                 info["reason"] = e.get("reason")
                 tok = e.get("tokens") or {}
@@ -158,6 +186,71 @@ def _sessions() -> list[dict[str, Any]]:
 @app.get("/api/sessions")
 async def sessions() -> list[dict[str, Any]]:
     return _sessions()
+
+
+_run_act_cache: dict[int, str | None] = {}
+
+
+def _run_act(conn: sqlite3.Connection, run_id: int) -> str | None:
+    if run_id not in _run_act_cache:
+        row = conn.execute(
+            "SELECT raw_state FROM decisions WHERE run_id = ? ORDER BY idx LIMIT 1", (run_id,)
+        ).fetchone()
+        act = None
+        if row:
+            act = (json.loads(row["raw_state"]).get("context") or {}).get("act_name")
+        _run_act_cache[run_id] = act
+    return _run_act_cache[run_id]
+
+
+@app.get("/api/metrics")
+async def metrics() -> dict[str, Any]:
+    sess = list(reversed(_sessions()))  # chronological
+    total = {k: sum(s[k] for s in sess) for k in ("game", "game_fetch", "doc", "self_read", "misc", "doc_chars")}
+    play = total["game"] + total["game_fetch"]
+
+    with db() as conn:
+        runs = []
+        for r in conn.execute(
+            """
+            SELECT r.id, r.character, r.status, r.floor, r.started_at,
+                   (SELECT COUNT(*) FROM decisions d WHERE d.run_id = r.id) AS n_decisions,
+                   (SELECT COUNT(*) FROM action_attempts a WHERE a.run_id = r.id) AS n_attempts,
+                   (SELECT COUNT(*) FROM action_attempts a WHERE a.run_id = r.id AND a.ok = 0) AS n_illegal,
+                   (SELECT COUNT(*) FROM detail_queries q WHERE q.run_id = r.id) AS n_detail,
+                   (SELECT MAX(json_extract(d.raw_state, '$.context.floor'))
+                    FROM decisions d WHERE d.run_id = r.id) AS max_floor
+            FROM runs r ORDER BY r.id
+            """
+        ).fetchall():
+            d = dict(r)
+            d["act"] = _run_act(conn, r["id"])
+            runs.append(d)
+
+    # novelty tax: best floor by act variant (finished real runs only)
+    act_floor: dict[str, list[int]] = {}
+    for r in runs:
+        if r["status"] in ("victory", "defeat") and r["act"] and r["max_floor"]:
+            act_floor.setdefault(r["act"], []).append(r["max_floor"])
+
+    return {
+        "tool_split": {
+            "play": play,
+            "play_via_fetch": total["game_fetch"],
+            "doc": total["doc"],
+            "self_read": total["self_read"],
+            "misc": total["misc"],
+        },
+        "doc_chars": total["doc_chars"],
+        "sessions": [
+            {k: s[k] for k in ("id", "reason", "game", "game_fetch", "doc", "self_read", "doc_chars", "tokens_out")}
+            for s in sess
+        ],
+        "runs": runs,
+        "act_avg_floor": {
+            a: round(sum(v) / len(v), 1) for a, v in act_floor.items()
+        },
+    }
 
 
 # ── spire-codex art map (name -> image url), cached server-side ───────────
