@@ -188,19 +188,29 @@ async def sessions() -> list[dict[str, Any]]:
     return _sessions()
 
 
-_run_act_cache: dict[int, str | None] = {}
+# Per-act progression, cached once a run is finished (rows are immutable then).
+# floors reset to 0/1 at each act boundary, so a single MAX(floor) undercounts
+# any run that beats a boss — acts must be aggregated separately.
+_run_acts_cache: dict[int, list[dict[str, Any]]] = {}
 
 
-def _run_act(conn: sqlite3.Connection, run_id: int) -> str | None:
-    if run_id not in _run_act_cache:
-        row = conn.execute(
-            "SELECT raw_state FROM decisions WHERE run_id = ? ORDER BY idx LIMIT 1", (run_id,)
-        ).fetchone()
-        act = None
-        if row:
-            act = (json.loads(row["raw_state"]).get("context") or {}).get("act_name")
-        _run_act_cache[run_id] = act
-    return _run_act_cache[run_id]
+def _run_acts(conn: sqlite3.Connection, run_id: int, finished: bool) -> list[dict[str, Any]]:
+    if run_id in _run_acts_cache:
+        return _run_acts_cache[run_id]
+    rows = conn.execute(
+        """
+        SELECT json_extract(raw_state, '$.context.act')      AS act,
+               json_extract(raw_state, '$.context.act_name') AS act_name,
+               MAX(json_extract(raw_state, '$.context.floor')) AS floor
+        FROM decisions WHERE run_id = ?
+        GROUP BY act, act_name ORDER BY act
+        """,
+        (run_id,),
+    ).fetchall()
+    acts = [dict(r) for r in rows if r["act"] is not None]
+    if finished:
+        _run_acts_cache[run_id] = acts
+    return acts
 
 
 @app.get("/api/metrics")
@@ -224,14 +234,20 @@ async def metrics() -> dict[str, Any]:
             """
         ).fetchall():
             d = dict(r)
-            d["act"] = _run_act(conn, r["id"])
+            acts = _run_acts(conn, r["id"], d["status"] in ("victory", "defeat"))
+            d["acts"] = acts
+            d["act"] = acts[0]["act_name"] if acts else None           # act-1 variant
+            d["total_floor"] = sum(a["floor"] or 0 for a in acts)      # cumulative
+            d["top_act"] = acts[-1]["act_name"] if acts else None
             runs.append(d)
 
-    # novelty tax: best floor by act variant (finished real runs only)
+    # novelty tax: act-1 progress by act-1 variant (finished real runs only)
     act_floor: dict[str, list[int]] = {}
     for r in runs:
-        if r["status"] in ("victory", "defeat") and r["act"] and r["max_floor"]:
-            act_floor.setdefault(r["act"], []).append(r["max_floor"])
+        if r["status"] in ("victory", "defeat") and r["acts"]:
+            a1 = r["acts"][0]
+            if a1["floor"]:
+                act_floor.setdefault(a1["act_name"], []).append(a1["floor"])
 
     return {
         "tool_split": {

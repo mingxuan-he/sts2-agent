@@ -65,12 +65,17 @@
   .bigrow { display: flex; gap: 28px; flex-wrap: wrap; }
   .bigrow b { font-size: 17px; }
   .bigrow span { color: var(--dim); font-size: 11px; display: block; }
-  .runbars { display: flex; align-items: flex-end; gap: 4px; height: 96px; }
-  .runbar { width: 22px; border-radius: 3px 3px 0 0; position: relative; }
-  .runbar.Overgrowth { background: #3f6d43; }
-  .runbar.Underdocks { background: #3a5f8a; }
-  .runbar.unknown { background: var(--line); }
+  .runbars { display: flex; align-items: flex-end; gap: 4px; height: 96px; position: relative; }
+  .runbar { width: 22px; position: relative; display: flex; flex-direction: column-reverse; }
+  .runbar .seg { width: 100%; }
+  .runbar .seg:last-child { border-radius: 3px 3px 0 0; }
+  .seg.Overgrowth, .runbar.Overgrowth { background: #3f6d43; }
+  .seg.Underdocks, .runbar.Underdocks { background: #3a5f8a; }
+  .seg.Hive { background: #8a6d3a; }
+  .seg.Glory { background: #7a4a7a; }
+  .seg.unknown, .runbar.unknown { background: var(--line); }
   .runbar.victory { outline: 2px solid var(--green); }
+  .bossmark { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--red); pointer-events: none; }
   .runbar .fl { position: absolute; top: -15px; width: 100%; text-align: center;
                 font-size: 10px; color: var(--dim); }
   .bossline { border-top: 1px dashed var(--red); position: relative; margin-top: 2px; }
@@ -257,13 +262,20 @@ async function loadMetrics() {
   const pct = (x) => all ? (100 * x / all).toFixed(1) + "%" : "—";
 
   const real = m.runs.filter(r => ["victory", "defeat"].includes(r.status));
+  const scale = Math.max(34, ...real.map(r => r.total_floor || 0));  // 34 = through act 2 boss
+  const px = fl => fl / scale * 90;
   const bars = real.map(r => {
-    const fl = r.max_floor ?? r.floor ?? 0;
-    const h = Math.max(6, fl / 17 * 90);
-    return `<div class="runbar ${r.act ?? "unknown"} ${r.status}" style="height:${h}px"
-              title="run ${r.id} ${esc(r.character)} ${r.act ?? "?"} — floor ${fl}, ${r.status}">
-              <div class="fl">${fl}</div></div>`;
+    const acts = r.acts && r.acts.length ? r.acts : [{ act_name: null, floor: r.max_floor ?? r.floor ?? 0 }];
+    const total = r.total_floor ?? (r.max_floor ?? 0);
+    const segs = acts.map(a =>
+      `<div class="seg ${a.act_name ?? "unknown"}" style="height:${Math.max(3, px(a.floor || 0))}px"></div>`
+    ).join("");
+    const desc = acts.map(a => `${a.act_name ?? "?"} ${a.floor ?? 0}`).join(" + ");
+    return `<div class="runbar ${r.status}" title="run ${r.id} ${esc(r.character)} — ${desc}, ${r.status}">
+              <div class="fl">${total}</div>${segs}</div>`;
   }).join("");
+  const bossmarks = [17, 34].filter(f => f <= scale)
+    .map(f => `<div class="bossmark" style="bottom:${px(f)}px"></div>`).join("");
 
   const actAvg = Object.entries(m.act_avg_floor)
     .map(([a, v]) => `${a}: <b>${v}</b>`).join(" &nbsp; ");
@@ -285,9 +297,9 @@ async function loadMetrics() {
       <div><b>${(m.doc_chars / 1000).toFixed(0)}k</b><span>chars written</span></div>
       <div><b>${play ? (100 * ts.play_via_fetch / play).toFixed(0) + "%" : "—"}</b><span>play via raw fetch</span></div>
     </div></div>
-    <div class="msec"><h3>floor reached per run &nbsp;·&nbsp; <span class="mini Overgrowth runbar" style="width:14px"></span> overgrowth &nbsp;<span class="mini Underdocks runbar" style="width:14px"></span> underdocks &nbsp;·&nbsp; dashes = boss floor</h3>
-      <div class="runbars">${bars}</div><div class="bossline"></div>
-      <div class="dim" style="margin-top:6px">avg floor — ${actAvg || "—"}</div></div>
+    <div class="msec"><h3>floors climbed per run (acts stacked) &nbsp;·&nbsp; <span class="mini Overgrowth runbar" style="width:14px"></span> overgrowth &nbsp;<span class="mini Underdocks runbar" style="width:14px"></span> underdocks &nbsp;<span class="mini seg Hive runbar" style="width:14px"></span> hive &nbsp;<span class="mini seg Glory runbar" style="width:14px"></span> glory &nbsp;·&nbsp; dashes = bosses</h3>
+      <div class="runbars">${bossmarks}${bars}</div>
+      <div class="dim" style="margin-top:6px">avg act-1 floor — ${actAvg || "—"}</div></div>
     <div class="msec"><h3>per session</h3>
       <table><tr><th>session</th><th>end</th><th>game actions</th><th>doc writes</th><th>chars</th><th>memory reads</th></tr>
       ${sessRows}</table></div>`;
